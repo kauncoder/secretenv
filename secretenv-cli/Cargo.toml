@@ -1,6 +1,8 @@
 [package]
 name = "secretenv-cli"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
+secretenv-core = {path = "../secretenv-core"}
+clap ="4.6.0"
