@@ -1,14 +1,21 @@
 use secrecy::{ExposeSecret, SecretBox, SecretString};
-use secretenv_core::crypto::{self};
 use anyway::Error;
+use secretenv_core::format::{encode,decode};
+
+fn gen_test_password() -> SecretString {
+    SecretString::new(Box::from("test-password"))
+}
 
 #[test]
-fn test_encrypt_decrypt()->Result<(),Error> {
-    let password = SecretString::new(Box::from("mypassword"));
-    let expected_text = b"plaintext";
-    let plaintext = SecretBox::new(Box::new(expected_text.to_vec()));
-    let (ciphertext,salt) = crypto::encrypt_text(plaintext,&password)?;
-    let decrypted = crypto::decrypt_text(&ciphertext, &password,salt)?;
-    assert_eq!(expected_text, decrypted.expose_secret().as_slice());
+fn encode_decode_round_trip() -> Result<(), Error> {
+    let password = gen_test_password();
+    let expected_plaintext :&[u8] = b"test_plain_text";
+    let unexpected_plaintext :&[u8] = b"test_plain_text_bad";
+
+    let plaintext = SecretBox::new(Box::new(expected_plaintext.to_vec()));
+    let encrypted_blob = encode(plaintext, &password)?;
+    let plaintext_output = decode(&encrypted_blob, &password)?;
+    assert_eq!(expected_plaintext, plaintext_output.expose_secret());
+    assert_ne!(unexpected_plaintext, plaintext_output.expose_secret());
     Ok(())
 }

@@ -1,17 +1,25 @@
 use anyway::Error;
-
-use argon2::{Argon2, password_hash::SaltString};
+use argon2::password_hash::rand_core::RngCore;
+use argon2::{Argon2};
 use chacha20poly1305::{
     ChaCha20Poly1305, Nonce, aead::{Aead, AeadCore, KeyInit, OsRng, generic_array::GenericArray}
 };
+
 use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox, SecretString};
 use rpassword::prompt_password;
+use crate::constants::SALT_LEN;
 
 pub fn get_password()->Result<SecretString, Error>{
     //for now we just generate a password but later we will get it from storage/prompt
     let password = prompt_password("enter password: ")
     .map_err(|e| Error::msg(e.to_string()))?;
     Ok(SecretString::new(password.into_boxed_str()))
+}
+
+pub fn random_salt()->Result<Vec<u8>,Error>{
+    let mut salt = vec![0u8; SALT_LEN];
+    OsRng.try_fill_bytes(&mut salt).map_err(|e|Error::msg(format!("failed while generating salt: {e}")))?;
+    Ok(salt)
 }
 
 pub fn key_derivation(password: &SecretString, salt: &[u8]) -> Result<SecretBox<Vec<u8>>, Error> {
@@ -33,12 +41,6 @@ pub fn encrypt_with_key(plaintext: SecretBox<Vec<u8>>, key: SecretBox<Vec<u8>>) 
     Ok(out)
 }
 
-pub fn encrypt_text(plaintext: SecretBox<Vec<u8>>, password: &SecretString)-> Result<((Vec<u8>,Vec<u8>)), Error> {
-    let rnd_salt_string = SaltString::generate(&mut OsRng);
-    let salt = rnd_salt_string.as_str().as_bytes().to_vec(); // random, unique and can be public
-    let key =  key_derivation(password, &salt)?;
-    Ok((encrypt_with_key(plaintext,key)?,salt))
-}
 
 pub fn decrypt_with_key(encypted_text: &[u8], key: SecretBox<Vec<u8>>)->Result<SecretBox<Vec<u8>>, Error>{
     let cipher = ChaCha20Poly1305::new(GenericArray::from_slice(&key.expose_secret()));
