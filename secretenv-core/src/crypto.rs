@@ -1,4 +1,4 @@
-use anyway::Error;
+use anyhow::Error;
 use argon2::password_hash::rand_core::RngCore;
 use argon2::{Argon2};
 use chacha20poly1305::{

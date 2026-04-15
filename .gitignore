@@ -1,4 +1,4 @@
-./plan.md
+.plan.md
 **/target
 */**/Cargo.lock
 .env

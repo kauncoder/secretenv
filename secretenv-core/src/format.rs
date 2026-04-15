@@ -2,7 +2,7 @@
 //! This adds cersioning to the file
 //! `version (1) || salt (16) || nonce (12) || ciphertext`
 
-use anyway::Error;
+use anyhow::Error;
 use secrecy::{SecretBox, SecretString};
 use crate::crypto::{self, random_salt};
 use crate::constants::{VERSION,SALT_LEN};
