@@ -6,15 +6,15 @@ use chacha20poly1305::{
 };
 
 use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox, SecretString};
-use rpassword::prompt_password;
+//use rpassword::prompt_password;
 use crate::constants::SALT_LEN;
 
-pub fn get_password()->Result<SecretString, Error>{
-    //for now we just generate a password but later we will get it from storage/prompt
-    let password = prompt_password("enter password: ")
-    .map_err(|e| Error::msg(e.to_string()))?;
-    Ok(SecretString::new(password.into_boxed_str()))
-}
+// pub fn get_password()->Result<SecretString, Error>{
+//     //for now we just generate a password but later we will get it from storage/prompt
+//     let password = prompt_password("enter password: ")
+//     .map_err(|e| Error::msg(e.to_string()))?;
+//     Ok(SecretString::new(password.into_boxed_str()))
+// }
 
 pub fn random_salt()->Result<Vec<u8>,Error>{
     let mut salt = vec![0u8; SALT_LEN];

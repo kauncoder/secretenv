@@ -5,9 +5,11 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use secrecy::{ExposeSecret, SecretBox, SecretString};
+use std::env;
+use secretenv_core::key_management::{self, KEYRING_USER_DEFAULT};
 
 #[derive(Parser)]
-#[command(name = "secretenv", version, about = "Encrypt .env to .env.enc; decrypt to stdout only")]
+#[command(name = "secretenv", version, about = "encrypt .env to .env.enc; decrypt to stdout only")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -27,10 +29,31 @@ enum Commands {
     },
 }
 
-fn prompt_password() -> Result<SecretString> {
+// fn prompt_password() -> Result<SecretString> {
+//     let p = rpassword::prompt_password("Password: ").context("read password")?;
+//     Ok(SecretString::new(p.into_boxed_str()))
+// }
+
+
+
+fn resolve_password() -> Result<SecretString> {
+    // 1) Environment variable (good for CI / automation)
+    if let Ok(p) = env::var("SECRETENV_PASSWORD") {
+        if !p.is_empty() {
+            return Ok(SecretString::new(p.into_boxed_str()));
+        }
+    }
+    // 2) OS keyring (Linux Secret Service, macOS Keychain, Windows Credential Manager)
+    if let Some(p) = key_management::load_from_keyring(KEYRING_USER_DEFAULT)
+        .context("load password from keyring")?
+    {
+        return Ok(p);
+    }
+    // 3) Interactive prompt fallback
     let p = rpassword::prompt_password("Password: ").context("read password")?;
     Ok(SecretString::new(p.into_boxed_str()))
 }
+
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -39,7 +62,7 @@ fn main() -> Result<()> {
             let bytes = fs::read(&path)
                 .with_context(|| format!("read {}", path.display()))?;
             let plaintext = SecretBox::new(Box::new(bytes));
-            let pwd = prompt_password()?;
+            let pwd = resolve_password()?;
             let blob = secretenv_core::format::encode(plaintext, &pwd)?;
 
             let out_path =
@@ -51,7 +74,7 @@ fn main() -> Result<()> {
         Commands::Decrypt { path } => {
             let blob = fs::read(&path)
                 .with_context(|| format!("read {}", path.display()))?;
-            let pwd = prompt_password()?;
+            let pwd = resolve_password()?;
             let plaintext = secretenv_core::format::decode(&blob, &pwd)?;
             io::stdout()
                 .write_all(plaintext.expose_secret())

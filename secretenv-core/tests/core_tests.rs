@@ -1,5 +1,5 @@
 use secrecy::{ExposeSecret, SecretBox, SecretString};
-use anyway::Error;
+use anyhow::Error;
 use secretenv_core::format::{encode,decode};
 
 fn gen_test_password() -> SecretString {
