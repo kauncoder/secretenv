@@ -1,40 +1,90 @@
-//! Binary layout for encoded text (no files yet).
-//! This adds cersioning to the file
-//! `version (1) || salt (16) || nonce (12) || ciphertext`
+//! Wire format: `version (1) || salt (16) || nonce (12) || ciphertext+tag`
 
-use anyhow::Error;
-use secrecy::{SecretBox, SecretString};
+use secrecy::{ExposeSecret, SecretBox, SecretString};
+
+use crate::constants::{current_format, format_from_version, FormatProfile, VERSION};
 use crate::crypto::{self, random_salt};
-use crate::constants::{VERSION,SALT_LEN};
-// const VERSION: u8 = 1;
-// const SALT_LEN: usize = 16; 
-/// Minimum: version + salt + nonce + Poly1305 tag (even for empty plaintext).
-const MIN_FILE_LEN: usize = VERSION as usize + SALT_LEN + 12 + 16;
+use crate::error::Error;
+use crate::VaultUnlock;
 
-pub fn encode(plaintext: SecretBox<Vec<u8>>, password: &SecretString) -> Result<Vec<u8>, Error> {
-    // let mut salt = [0u8; SALT_LEN];
-    // rand::rngs::OsRng.fill_bytes(&mut salt);
-    let salt = random_salt()?;
-    let key = crypto::key_derivation(password, &salt)?;
-    let payload = crypto::encrypt_with_key(plaintext, key)?;
-    let mut out = Vec::with_capacity(1 + SALT_LEN + payload.len());
-    out.push(VERSION);
-    out.extend_from_slice(&salt);
+pub type Result<T> = std::result::Result<T, Error>;
+
+fn format_from_blob(data: &[u8]) -> std::result::Result<&'static FormatProfile, Error> {
+    if data.is_empty() {
+        return Err(Error::TruncatedFile);
+    }
+    format_from_version(data[0]).ok_or(Error::UnsupportedVersion {
+        expected: VERSION,
+        got: data[0],
+    })
+}
+
+fn header_bytes(format: &FormatProfile, salt: &[u8]) -> Vec<u8> {
+    let mut header = Vec::with_capacity(format.header_len());
+    header.push(format.version);
+    header.extend_from_slice(salt);
+    header
+}
+
+fn resolve_key(
+    unlock: &VaultUnlock,
+    salt: &[u8],
+    format: &FormatProfile,
+) -> Result<SecretBox<Vec<u8>>> {
+    match unlock {
+        VaultUnlock::Password(password) => crypto::key_derivation(password, salt, format),
+        VaultUnlock::Key(key) => Ok(SecretBox::new(Box::new(key.expose_secret().clone()))),
+    }
+}
+
+pub(crate) fn salt_from_blob(data: &[u8]) -> Result<Vec<u8>> {
+    let format = format_from_blob(data)?;
+    if data.len() < format.min_file_len() {
+        return Err(Error::TruncatedFile);
+    }
+    let start = format.salt_offset();
+    Ok(data[start..start + format.salt_len()].to_vec())
+}
+
+pub(crate) fn encode(
+    plaintext: SecretBox<Vec<u8>>,
+    unlock: &VaultUnlock,
+    existing_salt: Option<&[u8]>,
+) -> Result<Vec<u8>> {
+    let format = current_format();
+    let salt = match existing_salt {
+        Some(s) if s.len() == format.salt_len() => s.to_vec(),
+        Some(_) => return Err(Error::EncryptionFailed),
+        None => random_salt(format)?,
+    };
+    let header = header_bytes(format, &salt);
+    let key = resolve_key(unlock, &salt, format)?;
+    let payload = crypto::encrypt_with_key(plaintext, key, &header)?;
+    let mut out = Vec::with_capacity(format.header_len() + payload.len());
+    out.extend_from_slice(&header);
     out.extend_from_slice(&payload);
     Ok(out)
 }
 
-pub fn decode(data: &[u8], password: &SecretString) -> Result<SecretBox<Vec<u8>>, Error> {
-    if data.len() < MIN_FILE_LEN {
-        return Err(Error::msg("truncated or invalid .env.enc"));
-    }
-    if data[0] != VERSION {
-        return Err(Error::msg("unsupported format version"));
+pub(crate) fn decode(data: &[u8], unlock: &VaultUnlock) -> Result<SecretBox<Vec<u8>>> {
+    let format = format_from_blob(data)?;
+    if data.len() < format.min_file_len() {
+        return Err(Error::TruncatedFile);
     }
 
-    let salt = &data[1..1 + SALT_LEN];
-    let payload = &data[1 + SALT_LEN..];
+    let header = &data[format.version_offset()..format.encrypted_payload_offset()];
+    let salt = &data[format.salt_offset()..format.encrypted_payload_offset()];
+    let payload = &data[format.encrypted_payload_offset()..];
 
-    let key = crypto::key_derivation(password, salt)?;
-    crypto::decrypt_with_key(payload, key)
+    let key = resolve_key(unlock, salt, format)?;
+    crypto::decrypt_with_key(payload, key, header, format)
+}
+
+pub(crate) fn derive_key_from_password(
+    data: &[u8],
+    password: &SecretString,
+) -> Result<SecretBox<Vec<u8>>> {
+    let format = format_from_blob(data)?;
+    let salt = salt_from_blob(data)?;
+    crypto::key_derivation(password, &salt, format)
 }
