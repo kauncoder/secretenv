@@ -1,6 +1,6 @@
 # secretenv
 
-**v0.1** — encrypt a dotenv-style secrets file to `.env.enc` for local/CI use.
+**secretenv** encrypts dotenv-style secrets into a `.env.enc` vault you can commit safely (ciphertext only), with a CLI for per-key edits and password, keyring, or keyfile unlock for local dev and CI. The **`secretenv-core`** library is included for Rust integrations.
 
 Workspace crates:
 
