@@ -2,10 +2,10 @@
 
 use secrecy::{ExposeSecret, SecretBox, SecretString};
 
-use crate::constants::{current_format, format_from_version, FormatProfile, VERSION};
+use crate::constants::{current_format, format_from_version, FormatProfile, MAX_VAULT_FILE_BYTES, VERSION};
 use crate::crypto::{self, random_salt};
 use crate::error::Error;
-use crate::VaultUnlock;
+use crate::unlock::VaultUnlock;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -38,7 +38,7 @@ fn resolve_key(
 }
 
 pub(crate) fn salt_from_blob(data: &[u8]) -> Result<Vec<u8>> {
-    let format = format_from_blob(data)?;
+    let format: &FormatProfile = format_from_blob(data)?;
     if data.len() < format.min_file_len() {
         return Err(Error::TruncatedFile);
     }
@@ -52,6 +52,13 @@ pub(crate) fn encode(
     existing_salt: Option<&[u8]>,
 ) -> Result<Vec<u8>> {
     let format = current_format();
+    let plaintext_len = plaintext.expose_secret().len();
+    if plaintext_len > format.max_plaintext_bytes(MAX_VAULT_FILE_BYTES) {
+        return Err(Error::ExceededVaultSizeLimit {
+            max: MAX_VAULT_FILE_BYTES,
+            got: format.encrypted_blob_len(plaintext_len),
+        });
+    }
     let salt = match existing_salt {
         Some(s) if s.len() == format.salt_len() => s.to_vec(),
         Some(_) => return Err(Error::EncryptionFailed),
@@ -67,6 +74,12 @@ pub(crate) fn encode(
 }
 
 pub(crate) fn decode(data: &[u8], unlock: &VaultUnlock) -> Result<SecretBox<Vec<u8>>> {
+    if data.len() > MAX_VAULT_FILE_BYTES {
+        return Err(Error::ExceededVaultSizeLimit {
+            max: MAX_VAULT_FILE_BYTES,
+            got: data.len(),
+        });
+    }
     let format = format_from_blob(data)?;
     if data.len() < format.min_file_len() {
         return Err(Error::TruncatedFile);

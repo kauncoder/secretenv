@@ -2,6 +2,7 @@
 name = "secretenv-cli"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 
 [[bin]]
 name = "secretenv"
@@ -9,8 +10,9 @@ path = "src/main.rs"
 
 [dependencies]
 secretenv-core = { path = "../secretenv-core" }
-clap = { version = "4.6", features = ["derive","env"] }
+clap = { version = "4.6", features = ["derive", "env"] }
 anyhow = "1.0"
 secrecy = "0.10.3"
 rpassword = "7.4"
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 tempfile = "3.27.0"

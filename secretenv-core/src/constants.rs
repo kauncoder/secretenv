@@ -1,5 +1,6 @@
 /// Current format version written to new vault files.
 pub const VERSION: u8 = 1;
+pub const MAX_VAULT_FILE_BYTES: usize = 256 * 1024;
 
 pub(crate) struct Argon2Params {
     pub(crate) m_cost: u32,
@@ -8,7 +9,7 @@ pub(crate) struct Argon2Params {
     pub(crate) output_len: Option<usize>,
 }
 
-/// Wire layout and crypto parameters for a version.
+/// Wire layout and crypto parameters for a fixed version.
 pub(crate) struct FormatProfile {
     pub version: u8,
     version_len: usize,
@@ -41,6 +42,15 @@ impl FormatProfile {
 
     pub const fn min_file_len(&self) -> usize {
         self.header_len() + self.min_encrypted_payload_len()
+    }
+
+    /// Total on-disk size for a vault blob encrypting `plaintext_len` bytes.
+    pub const fn encrypted_blob_len(&self, plaintext_len: usize) -> usize {
+        self.header_len() + self.min_encrypted_payload_len() + plaintext_len
+    }
+
+    pub const fn max_plaintext_bytes(&self, max_blob_bytes: usize) -> usize {
+        max_blob_bytes.saturating_sub(self.header_len() + self.min_encrypted_payload_len())
     }
 
     pub const fn salt_len(&self) -> usize {
@@ -96,6 +106,11 @@ mod tests {
         assert_eq!(f.salt_len(), 16);
         assert_eq!(f.header_len(), 17);
         assert_eq!(f.min_file_len(), 45);
+        assert_eq!(f.encrypted_blob_len(100), 145);
+        assert_eq!(
+            f.max_plaintext_bytes(MAX_VAULT_FILE_BYTES),
+            MAX_VAULT_FILE_BYTES - 45
+        );
         assert_eq!(f.argon2().m_cost, 19_456);
         assert!(format_from_version(99).is_none());
     }

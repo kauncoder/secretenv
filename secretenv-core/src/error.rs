@@ -4,6 +4,8 @@ use thiserror::Error;
 pub enum Error {
     #[error("file too short to be a valid .env.enc")]
     TruncatedFile,
+    #[error("encrypted file too large (max {max} bytes, got {got})")]
+    ExceededVaultSizeLimit { max: usize, got: usize },
     #[error("unsupported format version (expected {expected}, got {got})")]
     UnsupportedVersion { expected: u8, got: u8 },
     #[error("ciphertext too short")]
