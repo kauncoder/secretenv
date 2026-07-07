@@ -24,7 +24,7 @@ cargo build --release
 # binary: target/release/secretenv
 ```
 
-## CLI quickstartI’m in Ask mode — if you want to remove/slim vcs and add a CI workflow + README section, switch to Agent mode and say which option you prefer (full removal vs keep tracked-check only).
+## CLI quickstart
 
 ### Password unlock (interactive)
 
